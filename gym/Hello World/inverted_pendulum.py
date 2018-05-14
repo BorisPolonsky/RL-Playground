@@ -7,6 +7,8 @@ env = gym.make("CartPole-v0")
 hidden_dim = 100
 lr = 1e-3
 n_hidden_layer = 5
+# This network takes the 4-dimensional observation of the environment as state input, and outputs a 2-dimensional vector
+# representing the Q-value for taking action 0 or 1, respectively.
 with tf.variable_scope("DQN-Model"):
     net_input = net_output = tf.placeholder(shape=[None, 4], dtype=tf.float32)
     for layer_i in range(n_hidden_layer):
@@ -20,7 +22,7 @@ with tf.variable_scope("training-config"):
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     optimize_op = optimizer.minimize(loss, global_step=global_step)
 
-num_of_episode = 1000
+num_of_episode = 3000
 exploitation_rate = 0.3
 exploration_rate_decay = 1 - 1e-3
 gamma = 0.8  # Discount Factor
@@ -36,16 +38,16 @@ with tf.Session() as sess:
             env.render()
             q_vals = sess.run(net_output, feed_dict={net_input: observation[np.newaxis, :]})
             if random.random() < exploitation_rate:
-                action = np.argmax(q_vals[0])
+                action = np.argmax(q_vals[0])  # Exploitation
             else:
-                action = env.action_space.sample()
+                action = env.action_space.sample()  # Exploration
             prev_observation = observation
             observation, reward, done, info = env.step(action)
             if done:
                 # q_vals[0][action] = reward
                 q_vals[0][action] = -20  # Override the default reward
             else:
-                q_vals[0][action] = reward + max(sess.run(net_output, feed_dict={net_input: observation[np.newaxis, :]})[0])
+                q_vals[0][action] = reward + gamma * max(sess.run(net_output, feed_dict={net_input: observation[np.newaxis, :]})[0])
             sess.run(optimize_op, feed_dict={net_input: prev_observation[np.newaxis, :],
                                              target_output: q_vals})
             num_of_steps += 1
