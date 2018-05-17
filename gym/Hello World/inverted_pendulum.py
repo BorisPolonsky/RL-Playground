@@ -21,11 +21,15 @@ with tf.variable_scope("training-config"):
     loss = tf.reduce_mean((target_output - net_output)**2)
     learning_rate = tf.get_variable(dtype=tf.float32, initializer=lr, name="learning_rate")
     global_step = tf.get_variable(dtype=tf.int32, initializer=0, name="global_step")
-    total_reward = tf.get_variable(dtype=tf.float32, initializer=0.0, name="total_reward")
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     optimize_op = optimizer.minimize(loss, global_step=global_step)
+    total_reward = tf.get_variable(dtype=tf.float32, initializer=0.0, name="total_reward")
+    epsilon = tf.get_variable(dtype=tf.float32, initializer=0.0, name="epsilon")
+with tf.variable_scope("summary"):
     training_loss_summary = tf.summary.scalar(name="training_loss", tensor=loss)
-    reward_summary = tf.summary.scalar(name="training_loss", tensor=total_reward)
+    reward_summary = tf.summary.scalar(name="total_reward", tensor=total_reward)
+    epsilon_summary = tf.summary.scalar(name="epsilon", tensor=epsilon)
+    episode_summary = tf.summary.merge(inputs=[reward_summary, epsilon_summary], name="episode_summary")
 
 num_of_episode = 3000
 starting_exploitation_rate = 0.3
@@ -77,7 +81,8 @@ with tf.Session() as sess:
             total_reward_value += reward
             if done:
                 print("Episode {} ended after {} step(s).".format(i_episode, num_of_steps))
-                sess.run(tf.assign(total_reward, total_reward_value))
+                sess.run([tf.assign(total_reward, total_reward_value), tf.assign(epsilon, 1 - exploitation_rate)])
+                summary = sess.run(episode_summary)
                 writer.add_summary(summary=summary, global_step=i_episode+1)
                 exploitation_rate = 1 - (1 - exploitation_rate) * exploration_rate_decay
                 if maximum_exploitation_rate is not None and exploitation_rate > maximum_exploitation_rate:
