@@ -3,6 +3,8 @@ import tensorflow as tf
 import random
 import numpy as np
 
+cache_path = "./cache"
+
 env = gym.make("CartPole-v1")
 hidden_dim = 100
 lr = 1e-4
@@ -19,8 +21,11 @@ with tf.variable_scope("training-config"):
     loss = tf.reduce_mean((target_output - net_output)**2)
     learning_rate = tf.get_variable(dtype=tf.float32, initializer=lr, name="learning_rate")
     global_step = tf.get_variable(dtype=tf.int32, initializer=0, name="global_step")
+    total_reward = tf.get_variable(dtype=tf.float32, initializer=0.0, name="total_reward")
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     optimize_op = optimizer.minimize(loss, global_step=global_step)
+    training_loss_summary = tf.summary.scalar(name="training_loss", tensor=loss)
+    reward_summary = tf.summary.scalar(name="training_loss", tensor=total_reward)
 
 num_of_episode = 3000
 starting_exploitation_rate = 0.3
@@ -31,6 +36,7 @@ batch_size = 50
 max_memory_size = 10000
 
 with tf.Session() as sess:
+    writer = tf.summary.FileWriter(cache_path, sess.graph)
     sess.run(tf.global_variables_initializer())
     sess.run(tf.assign(learning_rate, lr))
     memory = []  # (state, action, reward, next_state)
@@ -38,7 +44,7 @@ with tf.Session() as sess:
     for i_episode in range(num_of_episode):
         observation = prev_observation = env.reset()
         num_of_steps = 0
-        time_stamps = [0]
+        total_reward_value = 0
         print("Episode {} begins with exploitation rate: {}.".format(i_episode, exploitation_rate))
         while True:
             env.render()
@@ -64,11 +70,15 @@ with tf.Session() as sess:
                     target_q_val[i_sample][current_action] = current_reward
                 else:
                     target_q_val[i_sample][current_action] = current_reward + gamma * max_q_val_next[i_sample]
-            sess.run(optimize_op, feed_dict={net_input: states,
-                                             target_output: target_q_val})
+            _, global_step_val, summary = sess.run([optimize_op, global_step, training_loss_summary],
+                                                   feed_dict={net_input: states, target_output: target_q_val})
+            writer.add_summary(summary=summary, global_step=global_step_val)
             num_of_steps += 1
+            total_reward_value += reward
             if done:
                 print("Episode {} ended after {} step(s).".format(i_episode, num_of_steps))
+                sess.run(tf.assign(total_reward, total_reward_value))
+                writer.add_summary(summary=summary, global_step=i_episode+1)
                 exploitation_rate = 1 - (1 - exploitation_rate) * exploration_rate_decay
                 if maximum_exploitation_rate is not None and exploitation_rate > maximum_exploitation_rate:
                     exploitation_rate = maximum_exploitation_rate
