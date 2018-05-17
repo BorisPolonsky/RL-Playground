@@ -3,7 +3,7 @@ import tensorflow as tf
 import random
 import numpy as np
 
-env = gym.make("CartPole-v0")
+env = gym.make("CartPole-v1")
 hidden_dim = 100
 lr = 1e-4
 n_hidden_layer = 1
